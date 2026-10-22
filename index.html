@@ -107,14 +107,14 @@
       <div id="questionCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-7 shadow-xl flex flex-col gap-5">
         <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-4">
           <div class="flex items-center gap-2.5">
-            <span id="qNumberBadge" class="px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-sm">Waiting for Data...</span>
+            <span id="qNumberBadge" class="px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-sm">Loading...</span>
             <span id="qMultiBadge" class="hidden px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-semibold"></span>
           </div>
           <button id="flagBtn" onclick="window.toggleFlag()" class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition">
             <span id="flagIcon">☆</span><span id="flagText">Flag</span>
           </button>
         </div>
-        <div id="qText" class="text-base sm:text-lg text-slate-100 leading-relaxed whitespace-pre-line font-normal">Please load the PDF file using the button in the top right.</div>
+        <div id="qText" class="text-base sm:text-lg text-slate-100 leading-relaxed whitespace-pre-line font-normal">Fetching questions from server...</div>
         <div id="optionsContainer" class="flex flex-col gap-3"></div>
         <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
           <div class="flex items-center gap-2">
@@ -291,12 +291,27 @@
     }
 
     window.initApp = async function() {
+      try {
+        const res = await fetch('questions.json', { cache: 'no-store' });
+        if (res.ok) {
+          allQuestions = await res.json();
+          document.getElementById('bankCountBadge').textContent = `${allQuestions.length} Qs`;
+          document.getElementById('pdfBtnLabel').textContent = 'Global Bank Loaded ✔';
+          window.applyFilter('all');
+          return;
+        }
+      } catch (e) {
+        console.log("No questions.json found on server.");
+      }
+
       const saved = localStorage.getItem('aif_c01_qbank');
       if (saved) {
         allQuestions = JSON.parse(saved);
         document.getElementById('bankCountBadge').textContent = `${allQuestions.length} Qs`;
-        document.getElementById('pdfBtnLabel').textContent = 'PDF Loaded ✔';
+        document.getElementById('pdfBtnLabel').textContent = 'Local PDF Loaded ✔';
         window.applyFilter('all');
+      } else {
+        document.getElementById('qText').textContent = "Failed to load questions.json from the server. Please ensure the file is uploaded to GitHub, or use the 'Load PDF' button to parse it locally.";
       }
     };
 
