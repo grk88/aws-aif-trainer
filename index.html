@@ -7,12 +7,8 @@
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="manifest.json" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     tailwind.config = { darkMode: 'class', theme: { extend: { colors: { aws: { orange: '#FF9900', dark: '#232F3E', blue: '#0073BB' } } } } };
-    if (window.pdfjsLib) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
   </script>
   <style>
     body { -webkit-tap-highlight-color: transparent; }
@@ -176,6 +172,7 @@
     let allQuestions = [];
     let filteredIndices = [];
     let currentPos = 0;
+    let renderedPos = -1;
     let selectedOptions = new Set();
     let userProgress = {}; 
     let appMode = 'training';
@@ -205,7 +202,10 @@
         
         onValue(ref(db, 'users/' + user.uid + '/progress'), (snapshot) => {
           userProgress = snapshot.val() || {};
-          if (allQuestions.length > 0) window.applyFilter(document.getElementById('filterSelect').value);
+          if (allQuestions.length > 0) {
+             renderedPos = -1; 
+             window.applyFilter(document.getElementById('filterSelect').value);
+          }
         });
       } else {
         currentUser = null;
@@ -251,6 +251,7 @@
       }
       filteredIndices = base;
       currentPos = 0;
+      renderedPos = -1;
       renderAll();
     };
 
@@ -272,11 +273,14 @@
       document.getElementById('statWrong').textContent = wrong;
       document.getElementById('statRemaining').textContent = allQuestions.length - (correct + wrong);
 
-      // Get sequence index (1 to 232) instead of raw PDF ID
       const realIndex = filteredIndices[currentPos];
       const q = allQuestions[realIndex];
       const p = userProgress[q.id] || {};
-      selectedOptions = new Set(p.selected ? p.selected.split('') : []);
+      
+      if (renderedPos !== currentPos) {
+        selectedOptions = new Set(p.selected && p.selected !== 'SELF_GRADED' ? p.selected.split('') : []);
+        renderedPos = currentPos;
+      }
       
       document.getElementById('qNumberBadge').textContent = `Q ${realIndex + 1} (${currentPos + 1}/${filteredIndices.length})`;
       document.getElementById('qText').textContent = q.question;
@@ -376,12 +380,25 @@
       renderAll();
     };
 
-    window.jumpToPos = function(pos) { currentPos = pos; renderAll(); };
-    window.nextQuestion = () => { if (currentPos < filteredIndices.length - 1) { currentPos++; renderAll(); } };
-    window.prevQuestion = () => { if (currentPos > 0) { currentPos--; renderAll(); } };
+    window.setMode = function(m) {
+      appMode = m;
+      const tBtn = document.getElementById('modeTrainingBtn');
+      const eBtn = document.getElementById('modeExamBtn');
+      if (m === 'training') {
+        tBtn.className = 'px-3 py-1.5 rounded-md bg-amber-500 text-slate-950 font-semibold transition';
+        eBtn.className = 'px-3 py-1.5 rounded-md text-slate-300 hover:text-white transition';
+      } else {
+        eBtn.className = 'px-3 py-1.5 rounded-md bg-amber-500 text-slate-950 font-semibold transition';
+        tBtn.className = 'px-3 py-1.5 rounded-md text-slate-300 hover:text-white transition';
+      }
+      window.applyFilter('all');
+    };
+
+    window.jumpToPos = function(pos) { currentPos = pos; renderedPos = -1; renderAll(); };
+    window.nextQuestion = () => { if (currentPos < filteredIndices.length - 1) { currentPos++; renderedPos = -1; renderAll(); } };
+    window.prevQuestion = () => { if (currentPos > 0) { currentPos--; renderedPos = -1; renderAll(); } };
     window.toggleFlag = () => { const qId = allQuestions[filteredIndices[currentPos]].id; userProgress[qId] = { ...userProgress[qId], flagged: !userProgress[qId]?.flagged }; window.saveProgress(); renderAll(); };
-    window.setMode = (m) => { appMode = m; window.applyFilter('all'); };
-    window.resetProgress = () => { if(confirm('Reset all progress and scores?')) { userProgress = {}; window.saveProgress(); renderAll(); } };
+    window.resetProgress = () => { if(confirm('Reset all progress and scores?')) { userProgress = {}; window.saveProgress(); renderedPos = -1; renderAll(); } };
 
     function renderGrid() {
       const g = document.getElementById('questionGrid');
@@ -392,7 +409,6 @@
         if (p.flagged) c += ' ring-2 ring-amber-400';
         if (pos === currentPos) c += ' border-2 border-white scale-105';
         
-        // Render 1 to 232 using the array index instead of the raw PDF ID
         g.innerHTML += `<button onclick="window.jumpToPos(${pos})" class="h-9 rounded-lg border text-xs transition ${c}">${idx + 1}</button>`;
       });
     }
