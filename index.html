@@ -204,7 +204,8 @@
           userProgress = snapshot.val() || {};
           if (allQuestions.length > 0) {
              renderedPos = -1; 
-             window.applyFilter(document.getElementById('filterSelect').value);
+             // Using renderAll() instead of window.applyFilter() prevents the UI from jumping to Q1
+             renderAll();
           }
         });
       } else {
@@ -228,7 +229,7 @@
         if (res.ok) {
           allQuestions = await res.json();
           document.getElementById('bankCountBadge').textContent = `${allQuestions.length} Qs`;
-          window.applyFilter('all');
+          window.applyFilter(document.getElementById('filterSelect').value);
           return;
         }
       } catch (e) {}
