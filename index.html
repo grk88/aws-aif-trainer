@@ -7,8 +7,12 @@
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="manifest.json" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     tailwind.config = { darkMode: 'class', theme: { extend: { colors: { aws: { orange: '#FF9900', dark: '#232F3E', blue: '#0073BB' } } } } };
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
   </script>
   <style>
     body { -webkit-tap-highlight-color: transparent; }
@@ -268,11 +272,13 @@
       document.getElementById('statWrong').textContent = wrong;
       document.getElementById('statRemaining').textContent = allQuestions.length - (correct + wrong);
 
-      const q = allQuestions[filteredIndices[currentPos]];
+      // Get sequence index (1 to 232) instead of raw PDF ID
+      const realIndex = filteredIndices[currentPos];
+      const q = allQuestions[realIndex];
       const p = userProgress[q.id] || {};
       selectedOptions = new Set(p.selected ? p.selected.split('') : []);
       
-      document.getElementById('qNumberBadge').textContent = `Q ${q.id} (${currentPos + 1}/${filteredIndices.length})`;
+      document.getElementById('qNumberBadge').textContent = `Q ${realIndex + 1} (${currentPos + 1}/${filteredIndices.length})`;
       document.getElementById('qText').textContent = q.question;
       document.getElementById('flagIcon').textContent = p.flagged ? '⭐' : '☆';
 
@@ -290,7 +296,6 @@
       const isMCQ = q.options && Object.keys(q.options).length >= 2;
       const hasSub = !!p.selected;
 
-      // Reset explanation box
       exp.classList.add('hidden');
       
       if (isMCQ) {
@@ -315,7 +320,6 @@
           exp.classList.remove('hidden');
         }
       } else {
-        // Handle non-MCQ
         container.classList.add('hidden');
         selfGradeContainer.classList.remove('hidden');
         checkBtn.classList.add('hidden');
@@ -387,7 +391,9 @@
         let c = p.selected ? (p.isCorrect ? 'bg-emerald-600/30 border-emerald-500/50' : 'bg-rose-600/30 border-rose-500/50') : 'bg-slate-800 border-slate-700';
         if (p.flagged) c += ' ring-2 ring-amber-400';
         if (pos === currentPos) c += ' border-2 border-white scale-105';
-        g.innerHTML += `<button onclick="window.jumpToPos(${pos})" class="h-9 rounded-lg border text-xs transition ${c}">${allQuestions[idx].id}</button>`;
+        
+        // Render 1 to 232 using the array index instead of the raw PDF ID
+        g.innerHTML += `<button onclick="window.jumpToPos(${pos})" class="h-9 rounded-lg border text-xs transition ${c}">${idx + 1}</button>`;
       });
     }
 
