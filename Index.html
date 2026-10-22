@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AWS Certified AI Practitioner (AIF-C01) — Training & Exam App</title>
+  <meta name="theme-color" content="#0f172a" />
+  <link rel="manifest" href="manifest.json" />
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PDF.js for client-side parsing of all 236 questions -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            aws: { orange: '#FF9900', dark: '#232F3E', blue: '#0073BB' }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
+
+  <!-- Top Header -->
+  <header class="sticky top-0 z-30 bg-slate-900/95 backdrop-blur border-b border-slate-800 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-slate-950 font-black text-lg shadow-lg shadow-amber-500/20">
+          AI
+        </div>
+        <div>
+          <h1 class="font-bold text-base sm:text-lg leading-tight flex items-center gap-2">
+            AWS AIF-C01 Trainer
+            <span id="bankCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+              Loaded
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">Interactive Practice &amp; Exam Simulator</p>
+        </div>
+      </div>
+
+      <!-- Mode & PDF Upload Controls -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="inline-flex rounded-lg bg-slate-800 p-1 border border-slate-700 text-xs font-medium">
+          <button id="modeTrainingBtn" onclick="setMode('training')" class="px-3 py-1.5 rounded-md bg-amber-500 text-slate-950 font-semibold transition">
+            Training Mode
+          </button>
+          <button id="modeExamBtn" onclick="setMode('exam')" class="px-3 py-1.5 rounded-md text-slate-300 hover:text-white transition">
+            Mock Exam (65Q)
+          </button>
+        </div>
+
+        <label class="cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition shadow">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+          <span id="pdfBtnLabel">Load Full 236-Q PDF</span>
+          <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="handlePdfUpload(event)" />
+        </label>
+
+        <button onclick="openSyncModal()" class="text-xs px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition" title="Export/Import JSON or Progress">
+          Sync / Export
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Score & Filter Bar -->
+  <section class="bg-slate-900/60 border-b border-slate-800/80 px-4 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <!-- Score Pills -->
+      <div class="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm flex-wrap">
+        <div class="flex items-center gap-1.5 bg-slate-800/90 px-3 py-1 rounded-lg border border-slate-700">
+          <span class="text-slate-400">Score:</span>
+          <span id="scorePct" class="font-bold text-amber-400">0%</span>
+        </div>
+        <div class="flex items-center gap-1.5 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-800/60 text-emerald-300">
+          <span>✔ Correct:</span>
+          <strong id="statCorrect">0</strong>
+        </div>
+        <div class="flex items-center gap-1.5 bg-rose-950/60 px-2.5 py-1 rounded-lg border border-rose-800/60 text-rose-300">
+          <span>✖ Wrong:</span>
+          <strong id="statWrong">0</strong>
+        </div>
+        <div class="flex items-center gap-1.5 bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-700 text-slate-300">
+          <span>Remaining:</span>
+          <strong id="statRemaining">0</strong>
+        </div>
+        <div id="timerBox" class="hidden items-center gap-1.5 bg-indigo-950/80 px-3 py-1 rounded-lg border border-indigo-700 text-indigo-300 font-mono">
+          <span>⏱</span>
+          <span id="examTimer">90:00</span>
+        </div>
+      </div>
+
+      <!-- Smart Filter Select -->
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-slate-400 hidden sm:inline">Filter:</span>
+        <select id="filterSelect" onchange="applyFilter(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500">
+          <option value="all">All Questions</option>
+          <option value="unanswered">Unanswered Only</option>
+          <option value="wrong">Incorrect Only (Drill Weak Areas)</option>
+          <option value="correct">Correct Only</option>
+          <option value="flagged">⭐ Flagged for Review</option>
+        </select>
+        <button onclick="resetProgress()" class="text-rose-400 hover:text-rose-300 px-2 py-1 rounded hover:bg-rose-950/40 transition">
+          Reset
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 sm:p-6">
+
+    <!-- Left/Main Column: Question Card -->
+    <div class="lg:col-span-8 xl:col-span-9 flex flex-col gap-4">
+      <div id="questionCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-7 shadow-xl flex flex-col gap-5">
+        
+        <!-- Question Header -->
+        <div class="flex items-center justify-between gap-2 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-2.5">
+            <span id="qNumberBadge" class="px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-sm">
+              Question 1
+            </span>
+            <span id="qMultiBadge" class="hidden px-2.5 py-1 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-semibold">
+              Choose TWO
+            </span>
+            <span id="qStatusBadge" class="hidden px-2.5 py-1 rounded-lg text-xs font-bold"></span>
+          </div>
+
+          <button id="flagBtn" onclick="toggleFlag()" class="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-800 text-slate-300 transition">
+            <span id="flagIcon">☆</span>
+            <span id="flagText">Flag for Review</span>
+          </button>
+        </div>
+
+        <!-- Question Stem -->
+        <div id="qText" class="text-base sm:text-lg text-slate-100 leading-relaxed whitespace-pre-line font-normal"></div>
+
+        <!-- Options List -->
+        <div id="optionsContainer" class="flex flex-col gap-3"></div>
+
+        <!-- Action Buttons Bar -->
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
+          <div class="flex items-center gap-2">
+            <button onclick="prevQuestion()" id="prevBtn" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition disabled:opacity-40">
+              ← Previous
+            </button>
+            <button onclick="nextQuestion()" id="nextBtn" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition disabled:opacity-40">
+              Next →
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2.5">
+            <button id="toggleExpBtn" onclick="toggleExplanation()" class="hidden px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-amber-300 text-sm font-medium transition">
+              Hide Explanation
+            </button>
+            <button id="checkBtn" onclick="submitAnswer()" class="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition">
+              Check Answer
+            </button>
+          </div>
+        </div>
+
+        <!-- Explanation Drawer -->
+        <div id="explanationBox" class="hidden mt-2 rounded-xl bg-slate-950/90 border border-slate-800 p-5 text-sm leading-relaxed text-slate-300 space-y-3">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <span class="font-bold text-slate-100 flex items-center gap-2">
+              📖 Official Answer &amp; Explanation
+            </span>
+            <span id="correctAnsLabel" class="px-2.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-xs border border-emerald-500/30"></span>
+          </div>
+          <div id="explanationText" class="whitespace-pre-line text-slate-300 leading-relaxed"></div>
+          <div id="linksContainer" class="pt-2 border-t border-slate-800/80 hidden">
+            <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Relevant Links:</p>
+            <ul id="linksList" class="space-y-1 text-xs text-sky-400 break-all"></ul>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Keyboard Shortcuts Hint (Desktop) -->
+      <div class="hidden sm:flex items-center justify-between text-xs text-slate-500 px-2">
+        <span>Shortcuts: <kbd class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded">A–E</kbd> Select Option · <kbd class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded">Enter</kbd> Check Answer · <kbd class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded">←/→</kbd> Navigate · <kbd class="px-1.5 py-0.5 bg-slate-900 border border-slate-800 rounded">F</kbd> Flag</span>
+        <span id="storageStatus">Progress auto-saved locally</span>
+      </div>
+    </div>
+
+    <!-- Right Column: Question Navigator Grid -->
+    <aside class="lg:col-span-4 xl:col-span-3 flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="font-bold text-sm text-slate-200">Question Navigator</h2>
+          <span id="gridCounter" class="text-xs text-slate-400"></span>
+        </div>
+
+        <!-- Legend -->
+        <div class="grid grid-cols-2 gap-1.5 text-[11px] text-slate-400 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+          <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Correct</div>
+          <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Incorrect</div>
+          <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Flagged</div>
+          <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-slate-700"></span> Unanswered</div>
+        </div>
+
+        <!-- Jump to # -->
+        <div class="flex gap-2">
+          <input id="jumpInput" type="number" min="1" placeholder="Jump to Q #..." class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500" onkeydown="if(event.key==='Enter') jumpToNumber()" />
+          <button onclick="jumpToNumber()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200">Go</button>
+        </div>
+
+        <!-- Grid -->
+        <div id="questionGrid" class="grid grid-cols-6 sm:grid-cols-8 lg:grid-cols-5 xl:grid-cols-6 gap-1.5 max-h-[420px] overflow-y-auto custom-scroll pr-1"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Sync / Export Modal -->
+  <div id="syncModal" class="fixed inset-0 z-50 hidden bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-base text-white">Cloud Sync &amp; Dataset Manager</h3>
+        <button onclick="closeSyncModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
+      </div>
+      <p class="text-xs text-slate-400 leading-relaxed">
+        Export all parsed questions as <code class="text-amber-300">questions.json</code> for your Git / Google Cloud repo, or transfer your score &amp; progress across desktop and mobile.
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <button onclick="exportQuestionsJson()" class="p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 text-amber-300 text-xs font-bold text-left">
+          ⬇ Export Full Questions JSON
+          <span class="block text-[11px] font-normal text-slate-400 mt-0.5">Commit to Git repo (questions.json)</span>
+        </button>
+        <button onclick="exportProgressJson()" class="p-3 rounded-xl bg-sky-500/15 border border-sky-500/40 hover:bg-sky-500/25 text-sky-300 text-xs font-bold text-left">
+          ⬇ Export My Score &amp; Progress
+          <span class="block text-[11px] font-normal text-slate-400 mt-0.5">Backup or move to phone</span>
+        </button>
+      </div>
+      <div class="pt-2 border-t border-slate-800">
+        <label class="block text-xs font-semibold text-slate-300 mb-1.5">Import Questions or Progress JSON:</label>
+        <input type="file" accept=".json" onchange="importJsonFile(event)" class="text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 hover:file:bg-slate-700" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configure PDF.js worker
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    // Starter Questions extracted directly from your AWS Certified AI Practitioner AIF-C01.pdf
+    const STARTER_QUESTIONS = [
+      {
+        id: 1,
+        question: "A company makes forecasts each quarter to decide how to optimize operations to meet expected demand. The company uses ML models to make these forecasts.\nAn AI practitioner is writing a report about the trained ML models to provide transparency and explainability to company stakeholders.\nWhat should the AI practitioner include in the report to meet the transparency and explainability requirements?",
+        options: {
+          A: "Code for model training",
+          B: "Partial dependence plots (PDPs)",
+          C: "Sample data for training",
+          D: "Model convergence tables"
+        },
+        answer: "B",
+        explanation: "The correct answer is B. Partial dependence plots (PDPs).\n\nTransparency and explainability in AI/ML refer to the ability to understand how a model makes its predictions. Partial Dependence Plots (PDPs) visualize the marginal effect of one or two features on the predicted outcome of a machine learning model. By showing these relationships, stakeholders can gain insight into which features are most influential in driving the model's forecasts and in what direction.",
+        links: ["https://christophm.github.io/interpretable-ml-book/pdp.html", "https://scikit-learn.org/stable/modules/partial_dependence.html"]
+      },
+      {
+        id: 2,
+        question: "A law firm wants to build an AI application by using large language models (LLMs). The application will read legal documents and extract key points from the documents. Which solution meets these requirements?",
+        options: {
+          A: "Build an automatic named entity recognition system.",
+          B: "Create a recommendation engine.",
+          C: "Develop a summarization chatbot.",
+          D: "Develop a multi-language translation system."
+        },
+        answer: "C",
+        explanation: "The correct answer is C. Develop a summarization chatbot.\n\nA summarization chatbot is designed to ingest text and produce a condensed, coherent summary highlighting the main points. LLMs are particularly effective for text summarization due to their ability to understand context, identify crucial information, and generate human-quality summaries.",
+        links: ["https://aws.amazon.com/sagemaker/jumpstart/", "https://aws.amazon.com/machine-learning/generative-ai/"]
+      },
+      {
+        id: 3,
+        question: "A company wants to classify human genes into 20 categories based on gene characteristics. The company needs an ML algorithm to document how the inner mechanism of the model affects the output. Which ML algorithm meets these requirements?",
+        options: {
+          A: "Decision trees",
+          B: "Linear regression",
+          C: "Logistic regression",
+          D: "Neural networks"
+        },
+        answer: "A",
+        explanation: "The correct answer is A, Decision Trees.\n\nDecision Trees are highly interpretable machine learning algorithms. Their structure mimics a flowchart, with each internal node representing a test on an attribute, each branch representing the outcome, and each leaf node representing a class label. This hierarchical structure allows users to easily trace the path from input features to the final classification.",
+        links: ["https://scikit-learn.org/stable/modules/tree.html"]
+      },
+      {
+        id: 4,
+        question: "A company has built an image classification model to predict plant diseases from photos of plant leaves. The company wants to evaluate how many images the model classified correctly. Which evaluation metric should the company use to measure the model's performance?",
+        options: {
+          A: "R-squared score",
+          B: "Accuracy",
+          C: "Root mean squared error (RMSE)",
+          D: "Learning rate"
+        },
+        answer: "B",
+        explanation: "The correct answer is B. Accuracy.\n\nAccuracy is the ratio of correctly classified instances to the total number of instances. R-squared and RMSE are regression metrics, and learning rate is a training hyperparameter.",
+        links: ["https://developers.google.com/machine-learning/crash-course/classification/accuracy"]
+      },
+      {
+        id: 5,
+        question: "A company is using a pre-trained large language model (LLM) to build a chatbot for product recommendations. The company needs the LLM outputs to be short and written in a specific language. Which solution will align the LLM response quality with the company's expectations?",
+        options: {
+          A: "Adjust the prompt.",
+          B: "Choose an LLM of a different size.",
+          C: "Increase the temperature.",
+          D: "Increase the Top K value."
+        },
+        answer: "A",
+        explanation: "The correct answer is A: Adjust the prompt.\n\nPrompt engineering is the most direct and efficient way to influence the LLM's output to be shorter and in a specific language without switching models or increasing randomness.",
+        links: ["https://www.promptingguide.ai/"]
+      },
+      {
+        id: 6,
+        question: "A company uses Amazon SageMaker for its ML pipeline in a production environment. The company has large input data sizes up to 1 GB and processing times up to 1 hour. The company needs near real-time latency. Which SageMaker inference option meets these requirements?",
+        options: {
+          A: "Real-time inference",
+          B: "Serverless inference",
+          C: "Asynchronous inference",
+          D: "Batch transform"
+        },
+        answer: "C",
+        explanation: "The correct answer is C: Asynchronous Inference.\n\nAsynchronous Inference is explicitly designed for handling large payloads (up to 1 GB) and long processing times (up to 1 hour) by queuing requests and decoupling request submission from response retrieval.",
+        links: ["https://docs.aws.amazon.com/sagemaker/latest/dg/async-inference.html"]
+      },
+      {
+        id: 40,
+        question: "A company wants to deploy a conversational chatbot to answer customer questions. The chatbot is based on a fine-tuned Amazon SageMaker JumpStart model. The application must comply with multiple regulatory frameworks. Which capabilities can the company show compliance for? (Choose two.)",
+        options: {
+          A: "Auto scaling inference endpoints",
+          B: "Threat detection",
+          C: "Data protection",
+          D: "Cost optimization",
+          E: "Loosely coupled microservices"
+        },
+        answer: "BC",
+        explanation: "The correct answers are B (Threat detection) and C (Data protection).\n\nCompliance frameworks mandate security measures to identify and mitigate threats (e.g., Amazon GuardDuty) and protect sensitive customer data in transit and at rest (e.g., AWS KMS, IAM).",
+        links: ["https://aws.amazon.com/security/", "https://aws.amazon.com/compliance/"]
+      },
+      {
+        id: 45,
+        question: "An ecommerce company wants to build a solution to determine customer sentiments based on written customer reviews of products. Which AWS services meet these requirements? (Choose two.)",
+        options: {
+          A: "Amazon Lex",
+          B: "Amazon Comprehend",
+          C: "Amazon Polly",
+          D: "Amazon Bedrock",
+          E: "Amazon Rekognition"
+        },
+        answer: "BD",
+        explanation: "The correct answers are B (Amazon Comprehend) and D (Amazon Bedrock).\n\nAmazon Comprehend is an NLP service with built-in sentiment analysis, and Amazon Bedrock provides foundation models capable of analyzing text sentiment at scale.",
+        links: ["https://aws.amazon.com/comprehend/", "https://aws.amazon.com/bedrock/"]
+      }
+    ];
+
+    // App State
+    let allQuestions = [];
+    let filteredIndices = [];
+    let currentPos = 0; // position inside filteredIndices
+    let selectedOptions = new Set();
+    let userProgress = {}; // { [qId]: { selected: "B", isCorrect: true, flagged: false } }
+    let appMode = 'training'; // 'training' | 'exam'
+    let timerInterval = null;
+    let secondsRemaining = 90 * 60;
+
+    // Initialize App
+    async function initApp() {
+      // 1. Try loading external questions.json (for Option A Git/Cloud deployment)
+      try {
+        const res = await fetch('questions.json', { cache: 'no-store' });
+        if (res.ok) {
+          const externalBank = await res.json();
+          if (Array.isArray(externalBank) && externalBank.length > 0) {
+            allQuestions = externalBank;
+            localStorage.setItem('aif_c01_questions_v1', JSON.stringify(allQuestions));
+          }
+        }
+      } catch (_) {}
+
+      // 2. Otherwise check localStorage for previously parsed 236-question PDF
+      if (allQuestions.length === 0) {
+        const savedBank = localStorage.getItem('aif_c01_questions_v1');
+        if (savedBank) {
+          try { allQuestions = JSON.parse(savedBank); } catch (_) {}
+        }
+      }
+
+      // 3. Fallback to starter bank
+      if (allQuestions.length === 0) {
+        allQuestions = STARTER_QUESTIONS;
+      }
+
+      // Load saved user progress
+      const savedProg = localStorage.getItem('aif_c01_progress_v1');
+      if (savedProg) {
+        try { userProgress = JSON.parse(savedProg); } catch (_) {}
+      }
+
+      updateBankBadge();
+      applyFilter('all');
+    }
+
+    function updateBankBadge() {
+      const badge = document.getElementById('bankCountBadge');
+      badge.textContent = `${allQuestions.length} Questions Ready`;
+      if (allQuestions.length >= 200) {
+        document.getElementById('pdfBtnLabel').textContent = 'Full 236-Q Loaded ✔';
+      }
+    }
+
+    // Client-side PDF.js parser tailored to AWS Certified AI Practitioner AIF-C01.pdf
+    async function handlePdfUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const label = document.getElementById('pdfBtnLabel');
+      label.textContent = 'Parsing PDF...';
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          label.textContent = `Reading page ${i}/${pdf.numPages}...`;
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          // Sort items top-to-bottom, left-to-right to prevent page-break interleaving
+          const items = textContent.items.slice().sort((a, b) => {
+            const yDiff = b.transform[5] - a.transform[5];
+            return Math.abs(yDiff) > 4 ? yDiff : a.transform[4] - b.transform[4];
+          });
+
+          let lastY = null;
+          let pageLines = '';
+          for (const item of items) {
+            const y = Math.round(item.transform[5]);
+            if (lastY !== null && Math.abs(y - lastY) > 5) {
+              pageLines += '\n';
+            } else if (lastY !== null) {
+              pageLines += ' ';
+            }
+            pageLines += item.str;
+            lastY = y;
+          }
+          fullText += '\n' + pageLines + '\n';
+        }
+
+        const parsed = parseQuestionsFromText(fullText);
+        if (parsed.length > 0) {
+          allQuestions = parsed;
+          localStorage.setItem('aif_c01_questions_v1', JSON.stringify(allQuestions));
+          updateBankBadge();
+          applyFilter('all');
+          alert(`Successfully parsed ${parsed.length} questions, answers, and explanations from ${file.name}!`);
+        } else {
+          alert('Could not detect question blocks in this PDF.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error parsing PDF: ' + err.message);
+      } finally {
+        updateBankBadge();
+      }
+    }
+
+    function parseQuestionsFromText(text) {
+      const clean = text.replace(/\r/g, '');
+      const blocks = clean.split(/(?=Question:\s*\d+)/g).filter(b => /^Question:\s*\d+/.test(b.trim()));
+      const results = [];
+
+      for (const block of blocks) {
+        const idMatch = block.match(/^Question:\s*(\d+)/);
+        if (!idMatch) continue;
+        const id = parseInt(idMatch[1], 10);
+
+        const ansMatch = block.match(/\n\s*Answer:\s*([A-E]+)\b/i);
+        const answer = ansMatch ? ansMatch[1].toUpperCase().trim() : 'A';
+
+        const beforeAnswer = ansMatch ? block.slice(0, ansMatch.index) : block;
+        const afterAnswer = ansMatch ? block.slice(ansMatch.index + ansMatch[0].length) : '';
+
+        // Extract Question Stem and Options A-E
+        const optionRegex = /\n\s*([A-E])\.\s*([\s\S]*?)(?=\n\s*[A-E]\.\s*|$)/g;
+        const firstOptIdx = beforeAnswer.search(/\n\s*A\.\s*/);
+        let qStem = firstOptIdx !== -1
+          ? beforeAnswer.slice(0, firstOptIdx)
+          : beforeAnswer;
+        qStem = qStem.replace(/^Question:\s*\d+\s*/, '').trim();
+
+        const options = {};
+        if (firstOptIdx !== -1) {
+          const optsPart = beforeAnswer.slice(firstOptIdx);
+          let match;
+          while ((match = optionRegex.exec(optsPart)) !== null) {
+            options[match[1]] = match[2].replace(/\s+/g, ' ').trim();
+          }
+        }
+
+        // Extract Explanation & Links
+        let explanation = afterAnswer.replace(/^\s*Explanation:\s*/i, '').trim();
+        const urlRegex = /https?:\/\/[^\s)]+/g;
+        const links = [...new Set((explanation.match(urlRegex) || []).map(u => u.replace(/[.,;]+$/, '')))];
+
+        if (qStem && Object.keys(options).length >= 2) {
+          results.push({ id, question: qStem, options, answer, explanation, links });
+        }
+      }
+
+      return results.sort((a, b) => a.id - b.id);
+    }
+
+    // Filter & Navigation
+    function applyFilter(filterType) {
+      document.getElementById('filterSelect').value = filterType;
+      let baseIndices = allQuestions.map((_, idx) => idx);
+
+      if (appMode === 'exam') {
+        // Pick up to 65 shuffled questions for Mock Exam mode
+        baseIndices = baseIndices.sort(() => Math.random() - 0.5).slice(0, Math.min(65, allQuestions.length));
+      } else {
+        baseIndices = baseIndices.filter(idx => {
+          const q = allQuestions[idx];
+          const prog = userProgress[q.id];
+          if (filterType === 'unanswered') return !prog || !prog.selected;
+          if (filterType === 'wrong') return prog && prog.selected && !prog.isCorrect;
+          if (filterType === 'correct') return prog && prog.isCorrect;
+          if (filterType === 'flagged') return prog && prog.flagged;
+          return true;
+        });
+      }
+
+      filteredIndices = baseIndices;
+      currentPos = 0;
+      renderAll();
+    }
+
+    function renderAll() {
+      renderStats();
+      renderQuestion();
+      renderGrid();
+    }
+
+    function renderStats() {
+      let correct = 0, wrong = 0;
+      for (const q of allQuestions) {
+        const p = userProgress[q.id];
+        if (p && p.selected) {
+          if (p.isCorrect) correct++;
+          else wrong++;
+        }
+      }
+      const answered = correct + wrong;
+      const pct = answered > 0 ? Math.round((correct / answered) * 100) : 0;
+
+      document.getElementById('scorePct').textContent = `${pct}% (${correct}/${answered})`;
+      document.getElementById('statCorrect').textContent = correct;
+      document.getElementById('statWrong').textContent = wrong;
+      document.getElementById('statRemaining').textContent = Math.max(0, allQuestions.length - answered);
+    }
+
+    function renderQuestion() {
+      const container = document.getElementById('optionsContainer');
+      const expBox = document.getElementById('explanationBox');
+      const toggleExpBtn = document.getElementById('toggleExpBtn');
+      const statusBadge = document.getElementById('qStatusBadge');
+
+      if (filteredIndices.length === 0) {
+        document.getElementById('qNumberBadge').textContent = 'No Matches';
+        document.getElementById('qText').textContent = 'No questions match the current filter. Switch the filter to "All Questions" to continue.';
+        container.innerHTML = '';
+        expBox.classList.add('hidden');
+        toggleExpBtn.classList.add('hidden');
+        statusBadge.classList.add('hidden');
+        return;
+      }
+
+      const q = allQuestions[filteredIndices[currentPos]];
+      const prog = userProgress[q.id] || {};
+      const isMulti = q.answer.length > 1;
+
+      // Restore selection state
+      selectedOptions = new Set(prog.selected ? prog.selected.split('') : []);
+
+      document.getElementById('qNumberBadge').textContent = `Question ${q.id} (${currentPos + 1} of ${filteredIndices.length})`;
+      const multiBadge = document.getElementById('qMultiBadge');
+      if (isMulti) {
+        multiBadge.textContent = `Choose ${q.answer.length}`;
+        multiBadge.classList.remove('hidden');
+      } else {
+        multiBadge.classList.add('hidden');
+      }
+
+      // Flag button state
+      const isFlagged = !!prog.flagged;
+      document.getElementById('flagIcon').textContent = isFlagged ? '⭐' : '☆';
+      document.getElementById('flagText').textContent = isFlagged ? 'Flagged' : 'Flag for Review';
+
+      // Status badge
+      if (prog.selected) {
+        statusBadge.classList.remove('hidden');
+        if (prog.isCorrect) {
+          statusBadge.textContent = '✔ CORRECT';
+          statusBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+        } else {
+          statusBadge.textContent = '✖ INCORRECT';
+          statusBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        }
+      } else {
+        statusBadge.classList.add('hidden');
+      }
+
+      document.getElementById('qText').textContent = q.question;
+
+      // Render Options
+      container.innerHTML = '';
+      const hasSubmitted = !!prog.selected;
+      const correctSet = new Set(q.answer.split(''));
+
+      Object.entries(q.options).forEach(([letter, text]) => {
+        const isChosen = selectedOptions.has(letter);
+        const isRightOption = correctSet.has(letter);
+
+        let cardStyle = 'border-slate-800 bg-slate-950/60 hover:border-slate-600 text-slate-200';
+        let badgeStyle = 'bg-slate-800 text-slate-300 border-slate-700';
+
+        if (hasSubmitted) {
+          if (isRightOption) {
+            cardStyle = 'border-emerald-500/80 bg-emerald-950/30 text-emerald-100';
+            badgeStyle = 'bg-emerald-500 text-slate-950 font-black';
+          } else if (isChosen && !isRightOption) {
+            cardStyle = 'border-rose-500/80 bg-rose-950/30 text-rose-100';
+            badgeStyle = 'bg-rose-500 text-white font-black';
+          }
+        } else if (isChosen) {
+          cardStyle = 'border-amber-500 bg-amber-500/10 text-white';
+          badgeStyle = 'bg-amber-500 text-slate-950 font-bold';
+        }
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `w-full text-left p-4 rounded-xl border-2 transition flex items-start gap-3.5 ${cardStyle}`;
+        btn.onclick = () => selectOption(letter, isMulti);
+        btn.innerHTML = `
+          <span class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs shrink-0 mt-0.5 ${badgeStyle}">
+            ${letter}
+          </span>
+          <span class="text-sm sm:text-base leading-relaxed flex-1">${escapeHtml(text)}</span>
+        `;
+        container.appendChild(btn);
+      });
+
+      // Prev / Next state
+      document.getElementById('prevBtn').disabled = currentPos === 0;
+      document.getElementById('nextBtn').disabled = currentPos >= filteredIndices.length - 1;
+
+      // Explanation state
+      if (hasSubmitted) {
+        document.getElementById('correctAnsLabel').textContent = `Answer: ${q.answer}`;
+        document.getElementById('explanationText').textContent = q.explanation || 'No explanation provided.';
+        const linksContainer = document.getElementById('linksContainer');
+        const linksList = document.getElementById('linksList');
+        linksList.innerHTML = '';
+
+        if (q.links && q.links.length > 0) {
+          linksContainer.classList.remove('hidden');
+          q.links.forEach(url => {
+            const li = document.createElement('li');
+            li.innerHTML = `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="hover:underline">🔗 ${escapeHtml(url)}</a>`;
+            linksList.appendChild(li);
+          });
+        } else {
+          linksContainer.classList.add('hidden');
+        }
+
+        expBox.classList.remove('hidden');
+        toggleExpBtn.classList.remove('hidden');
+        toggleExpBtn.textContent = 'Hide Explanation';
+      } else {
+        expBox.classList.add('hidden');
+        toggleExpBtn.classList.add('hidden');
+      }
+    }
+
+    function selectOption(letter, isMulti) {
+      if (isMulti) {
+        if (selectedOptions.has(letter)) selectedOptions.delete(letter);
+        else selectedOptions.add(letter);
+      } else {
+        selectedOptions.clear();
+        selectedOptions.add(letter);
+      }
+      // Temporarily highlight without locking until "Check Answer" is clicked
+      const q = allQuestions[filteredIndices[currentPos]];
+      if (userProgress[q.id] && userProgress[q.id].selected) {
+        delete userProgress[q.id].selected;
+        delete userProgress[q.id].isCorrect;
+      }
+      renderQuestionWithTempSelection();
+    }
+
+    function renderQuestionWithTempSelection() {
+      const q = allQuestions[filteredIndices[currentPos]];
+      const isMulti = q.answer.length > 1;
+      const container = document.getElementById('optionsContainer');
+      container.innerHTML = '';
+
+      Object.entries(q.options).forEach(([letter, text]) => {
+        const isChosen = selectedOptions.has(letter);
+        const cardStyle = isChosen
+          ? 'border-amber-500 bg-amber-500/10 text-white'
+          : 'border-slate-800 bg-slate-950/60 hover:border-slate-600 text-slate-200';
+        const badgeStyle = isChosen
+          ? 'bg-amber-500 text-slate-950 font-bold'
+          : 'bg-slate-800 text-slate-300 border-slate-700';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `w-full text-left p-4 rounded-xl border-2 transition flex items-start gap-3.5 ${cardStyle}`;
+        btn.onclick = () => selectOption(letter, isMulti);
+        btn.innerHTML = `
+          <span class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs shrink-0 mt-0.5 ${badgeStyle}">
+            ${letter}
+          </span>
+          <span class="text-sm sm:text-base leading-relaxed flex-1">${escapeHtml(text)}</span>
+        `;
+        container.appendChild(btn);
+      });
+    }
+
+    function submitAnswer() {
+      if (filteredIndices.length === 0) return;
+      if (selectedOptions.size === 0) {
+        alert('Please select an option first.');
+        return;
+      }
+      const q = allQuestions[filteredIndices[currentPos]];
+      const userAns = Array.from(selectedOptions).sort().join('');
+      const correctAns = q.answer.split('').sort().join('');
+      const isCorrect = userAns === correctAns;
+
+      userProgress[q.id] = {
+        ...(userProgress[q.id] || {}),
+        selected: userAns,
+        isCorrect
+      };
+      saveProgress();
+      renderAll();
+    }
+
+    function toggleExplanation() {
+      const expBox = document.getElementById('explanationBox');
+      const btn = document.getElementById('toggleExpBtn');
+      const hidden = expBox.classList.toggle('hidden');
+      btn.textContent = hidden ? 'View Explanation' : 'Hide Explanation';
+    }
+
+    function toggleFlag() {
+      if (filteredIndices.length === 0) return;
+      const q = allQuestions[filteredIndices[currentPos]];
+      const curr = userProgress[q.id] || {};
+      userProgress[q.id] = { ...curr, flagged: !curr.flagged };
+      saveProgress();
+      renderAll();
+    }
+
+    function prevQuestion() {
+      if (currentPos > 0) {
+        currentPos--;
+        renderAll();
+      }
+    }
+
+    function nextQuestion() {
+      if (currentPos < filteredIndices.length - 1) {
+        currentPos++;
+        renderAll();
+      }
+    }
+
+    function jumpToNumber() {
+      const val = parseInt(document.getElementById('jumpInput').value, 10);
+      if (!val) return;
+      const targetPos = filteredIndices.findIndex(idx => allQuestions[idx].id === val);
+      if (targetPos !== -1) {
+        currentPos = targetPos;
+        renderAll();
+      } else {
+        alert(`Question ${val} is not in the current filter view.`);
+      }
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById('questionGrid');
+      document.getElementById('gridCounter').textContent = `${filteredIndices.length} shown`;
+      grid.innerHTML = '';
+
+      filteredIndices.forEach((qIdx, pos) => {
+        const q = allQuestions[qIdx];
+        const prog = userProgress[q.id] || {};
+        const isCurrent = pos === currentPos;
+
+        let colorClass = 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700';
+        if (prog.selected) {
+          colorClass = prog.isCorrect
+            ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50'
+            : 'bg-rose-600/30 text-rose-300 border-rose-500/50';
+        }
+        if (prog.flagged) {
+          colorClass += ' ring-2 ring-amber-400';
+        }
+        if (isCurrent) {
+          colorClass += ' border-2 border-white font-black scale-105';
+        }
+
+        const btn = document.createElement('button');
+        btn.className = `h-9 rounded-lg border text-xs font-medium transition flex items-center justify-center ${colorClass}`;
+        btn.textContent = q.id;
+        btn.onclick = () => {
+          currentPos = pos;
+          renderAll();
+        };
+        grid.appendChild(btn);
+      });
+    }
+
+    function setMode(mode) {
+      appMode = mode;
+      const trainBtn = document.getElementById('modeTrainingBtn');
+      const examBtn = document.getElementById('modeExamBtn');
+      const timerBox = document.getElementById('timerBox');
+
+      if (mode === 'exam') {
+        examBtn.className = 'px-3 py-1.5 rounded-md bg-amber-500 text-slate-950 font-semibold transition';
+        trainBtn.className = 'px-3 py-1.5 rounded-md text-slate-300 hover:text-white transition';
+        timerBox.classList.remove('hidden');
+        timerBox.classList.add('flex');
+        startExamTimer();
+      } else {
+        trainBtn.className = 'px-3 py-1.5 rounded-md bg-amber-500 text-slate-950 font-semibold transition';
+        examBtn.className = 'px-3 py-1.5 rounded-md text-slate-300 hover:text-white transition';
+        timerBox.classList.add('hidden');
+        timerBox.classList.remove('flex');
+        clearInterval(timerInterval);
+      }
+      applyFilter('all');
+    }
+
+    function startExamTimer() {
+      clearInterval(timerInterval);
+      secondsRemaining = 90 * 60;
+      timerInterval = setInterval(() => {
+        secondsRemaining = Math.max(0, secondsRemaining - 1);
+        const mins = String(Math.floor(secondsRemaining / 60)).padStart(2, '0');
+        const secs = String(secondsRemaining % 60).padStart(2, '0');
+        document.getElementById('examTimer').textContent = `${mins}:${secs}`;
+      }, 1000);
+    }
+
+    function saveProgress() {
+      localStorage.setItem('aif_c01_progress_v1', JSON.stringify(userProgress));
+    }
+
+    function resetProgress() {
+      if (confirm('Reset all answered scores and flags?')) {
+        userProgress = {};
+        saveProgress();
+        renderAll();
+      }
+    }
+
+    // Export / Import for Git & Cross-Device Sync
+    function openSyncModal() { document.getElementById('syncModal').classList.remove('hidden'); }
+    function closeSyncModal() { document.getElementById('syncModal').classList.add('hidden'); }
+
+    function exportQuestionsJson() {
+      downloadJson(allQuestions, 'questions.json');
+    }
+
+    function exportProgressJson() {
+      downloadJson(userProgress, 'aif-c01-progress.json');
+    }
+
+    function downloadJson(obj, filename) {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    async function importJsonFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        if (Array.isArray(data)) {
+          allQuestions = data;
+          localStorage.setItem('aif_c01_questions_v1', JSON.stringify(allQuestions));
+          updateBankBadge();
+          applyFilter('all');
+          alert(`Imported ${data.length} questions!`);
+        } else {
+          userProgress = data;
+          saveProgress();
+          renderAll();
+          alert('Progress imported successfully!');
+        }
+        closeSyncModal();
+      } catch (e) {
+        alert('Invalid JSON file.');
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    // Desktop Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+      const key = e.key.toUpperCase();
+      if (['A', 'B', 'C', 'D', 'E'].includes(key)) {
+        const q = allQuestions[filteredIndices[currentPos]];
+        if (q && q.options[key]) {
+          selectOption(key, q.answer.length > 1);
+        }
+      } else if (e.key === 'Enter') {
+        submitAnswer();
+      } else if (e.key === 'ArrowRight') {
+        nextQuestion();
+      } else if (e.key === 'ArrowLeft') {
+        prevQuestion();
+      } else if (key === 'F') {
+        toggleFlag();
+      }
+    });
+
+    initApp();
+  </script>
+</body>
+</html>
