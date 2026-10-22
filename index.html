@@ -7,12 +7,8 @@
   <meta name="theme-color" content="#0f172a" />
   <link rel="manifest" href="manifest.json" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
     tailwind.config = { darkMode: 'class', theme: { extend: { colors: { aws: { orange: '#FF9900', dark: '#232F3E', blue: '#0073BB' } } } } };
-    if (window.pdfjsLib) {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
   </script>
   <style>
     body { -webkit-tap-highlight-color: transparent; }
@@ -56,16 +52,11 @@
           </p>
         </div>
       </div>
-
       <div class="flex items-center gap-2 flex-wrap">
         <div class="inline-flex rounded-lg bg-slate-800 p-1 border border-slate-700 text-xs font-medium">
           <button id="modeTrainingBtn" onclick="window.setMode('training')" class="px-3 py-1.5 rounded-md bg-amber-500 text-slate-950 font-semibold transition">Training Mode</button>
           <button id="modeExamBtn" onclick="window.setMode('exam')" class="px-3 py-1.5 rounded-md text-slate-300 hover:text-white transition">Mock Exam</button>
         </div>
-        <label class="cursor-pointer inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white transition shadow">
-          <span id="pdfBtnLabel">Load PDF</span>
-          <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="window.handlePdfUpload(event)" />
-        </label>
       </div>
     </div>
   </header>
@@ -87,7 +78,6 @@
           <span>Remaining:</span><strong id="statRemaining">0</strong>
         </div>
       </div>
-
       <div class="flex items-center gap-2 text-xs">
         <select id="filterSelect" onchange="window.applyFilter(this.value)" class="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 focus:outline-none focus:border-amber-500">
           <option value="all">All Questions</option>
@@ -114,8 +104,22 @@
             <span id="flagIcon">☆</span><span id="flagText">Flag</span>
           </button>
         </div>
+        
         <div id="qText" class="text-base sm:text-lg text-slate-100 leading-relaxed whitespace-pre-line font-normal">Fetching questions from server...</div>
+        
+        <!-- Options for standard MCQ -->
         <div id="optionsContainer" class="flex flex-col gap-3"></div>
+
+        <!-- Self-Grade Container for Non-MCQ -->
+        <div id="selfGradeContainer" class="hidden flex flex-col gap-3 items-center py-4 bg-slate-950/50 rounded-xl border border-slate-800">
+           <button id="revealBtn" onclick="window.revealSelfGrade()" class="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-sm shadow-lg transition">Reveal Official Answer</button>
+           <div id="gradeButtons" class="hidden flex gap-4 w-full justify-center">
+             <p class="w-full text-center text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider block">Did you get this correct?</p>
+             <button onclick="window.submitSelfGrade(true)" class="px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg transition">✔ Yes</button>
+             <button onclick="window.submitSelfGrade(false)" class="px-6 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-sm shadow-lg transition">✖ No</button>
+           </div>
+        </div>
+
         <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
           <div class="flex items-center gap-2">
             <button onclick="window.prevQuestion()" id="prevBtn" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium transition disabled:opacity-40">← Prev</button>
@@ -125,6 +129,7 @@
             <button id="checkBtn" onclick="window.submitAnswer()" class="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg transition">Check Answer</button>
           </div>
         </div>
+        
         <div id="explanationBox" class="hidden mt-2 rounded-xl bg-slate-950/90 border border-slate-800 p-5 text-sm leading-relaxed text-slate-300 space-y-3">
           <div class="flex items-center justify-between border-b border-slate-800 pb-2">
             <span class="font-bold text-slate-100">📖 Explanation</span>
@@ -213,106 +218,17 @@
       }
     };
 
-    window.handlePdfUpload = async function(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const label = document.getElementById('pdfBtnLabel');
-      label.textContent = 'Parsing...';
-
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = '';
-
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const textContent = await page.getTextContent();
-          const items = textContent.items.slice().sort((a, b) => {
-            const yDiff = b.transform[5] - a.transform[5];
-            return Math.abs(yDiff) > 4 ? yDiff : a.transform[4] - b.transform[4];
-          });
-
-          let lastY = null;
-          let pageLines = '';
-          for (const item of items) {
-            const y = Math.round(item.transform[5]);
-            if (lastY !== null && Math.abs(y - lastY) > 5) pageLines += '\n';
-            else if (lastY !== null) pageLines += ' ';
-            pageLines += item.str;
-            lastY = y;
-          }
-          fullText += '\n' + pageLines + '\n';
-        }
-
-        const parsed = parseQuestionsFromText(fullText);
-        if (parsed.length > 0) {
-          allQuestions = parsed;
-          localStorage.setItem('aif_c01_qbank', JSON.stringify(allQuestions));
-          document.getElementById('bankCountBadge').textContent = `${allQuestions.length} Qs`;
-          label.textContent = 'PDF Loaded ✔';
-          window.applyFilter('all');
-        }
-      } catch (err) {
-        label.textContent = 'Error';
-        alert('Error parsing PDF: ' + err.message);
-      }
-    };
-
-    function parseQuestionsFromText(text) {
-      const clean = text.replace(/\r/g, '');
-      const blocks = clean.split(/(?=Question:\s*\d+)/g).filter(b => /^Question:\s*\d+/.test(b.trim()));
-      const results = [];
-
-      for (const block of blocks) {
-        const idMatch = block.match(/^Question:\s*(\d+)/);
-        if (!idMatch) continue;
-        const id = parseInt(idMatch[1], 10);
-        const ansMatch = block.match(/\n\s*Answer:\s*([A-E]+)\b/i);
-        const answer = ansMatch ? ansMatch[1].toUpperCase().trim() : 'A';
-        const beforeAnswer = ansMatch ? block.slice(0, ansMatch.index) : block;
-        const afterAnswer = ansMatch ? block.slice(ansMatch.index + ansMatch[0].length) : '';
-
-        const optionRegex = /\n\s*([A-E])\.\s*([\s\S]*?)(?=\n\s*[A-E]\.\s*|$)/g;
-        const firstOptIdx = beforeAnswer.search(/\n\s*A\.\s*/);
-        let qStem = firstOptIdx !== -1 ? beforeAnswer.slice(0, firstOptIdx) : beforeAnswer;
-        qStem = qStem.replace(/^Question:\s*\d+\s*/, '').trim();
-
-        const options = {};
-        if (firstOptIdx !== -1) {
-          let match;
-          while ((match = optionRegex.exec(beforeAnswer.slice(firstOptIdx))) !== null) {
-            options[match[1]] = match[2].replace(/\s+/g, ' ').trim();
-          }
-        }
-        let explanation = afterAnswer.replace(/^\s*Explanation:\s*/i, '').trim();
-        if (qStem && Object.keys(options).length >= 2) results.push({ id, question: qStem, options, answer, explanation });
-      }
-      return results.sort((a, b) => a.id - b.id);
-    }
-
     window.initApp = async function() {
       try {
         const res = await fetch('questions.json', { cache: 'no-store' });
         if (res.ok) {
           allQuestions = await res.json();
           document.getElementById('bankCountBadge').textContent = `${allQuestions.length} Qs`;
-          document.getElementById('pdfBtnLabel').textContent = 'Global Bank Loaded ✔';
           window.applyFilter('all');
           return;
         }
-      } catch (e) {
-        console.log("No questions.json found on server.");
-      }
-
-      const saved = localStorage.getItem('aif_c01_qbank');
-      if (saved) {
-        allQuestions = JSON.parse(saved);
-        document.getElementById('bankCountBadge').textContent = `${allQuestions.length} Qs`;
-        document.getElementById('pdfBtnLabel').textContent = 'Local PDF Loaded ✔';
-        window.applyFilter('all');
-      } else {
-        document.getElementById('qText').textContent = "Failed to load questions.json from the server. Please ensure the file is uploaded to GitHub, or use the 'Load PDF' button to parse it locally.";
-      }
+      } catch (e) {}
+      document.getElementById('qText').textContent = "Could not find questions.json! Please ensure it is uploaded to your GitHub repository.";
     };
 
     window.applyFilter = function(filterType) {
@@ -335,7 +251,13 @@
     };
 
     function renderAll() {
-      if (filteredIndices.length === 0 || allQuestions.length === 0) return;
+      if (filteredIndices.length === 0 || allQuestions.length === 0) {
+        document.getElementById('qText').textContent = "No questions match this filter.";
+        document.getElementById('optionsContainer').innerHTML = "";
+        document.getElementById('explanationBox').classList.add('hidden');
+        return;
+      }
+
       let correct = 0, wrong = 0;
       allQuestions.forEach(q => {
         const p = userProgress[q.id];
@@ -355,38 +277,83 @@
       document.getElementById('flagIcon').textContent = p.flagged ? '⭐' : '☆';
 
       const multiBadge = document.getElementById('qMultiBadge');
-      if (q.answer.length > 1) {
+      if (q.answer && q.answer.length > 1 && q.answer !== "N/A") {
         multiBadge.textContent = `Choose ${q.answer.length}`;
         multiBadge.classList.remove('hidden');
       } else multiBadge.classList.add('hidden');
 
       const container = document.getElementById('optionsContainer');
-      container.innerHTML = '';
-      const hasSub = !!p.selected;
-      const ansSet = new Set(q.answer.split(''));
-      
-      Object.entries(q.options).forEach(([k, v]) => {
-        let style = selectedOptions.has(k) ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-800 bg-slate-950/60 text-slate-200';
-        if (hasSub) {
-          if (ansSet.has(k)) style = 'border-emerald-500/80 bg-emerald-950/30 text-emerald-100';
-          else if (selectedOptions.has(k)) style = 'border-rose-500/80 bg-rose-950/30 text-rose-100';
-        }
-        container.innerHTML += `<button onclick="window.selectOption('${k}', ${q.answer.length > 1})" class="w-full text-left p-4 rounded-xl border-2 transition flex items-start gap-3.5 ${style}"><span class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs shrink-0 bg-slate-800">${k}</span><span class="text-sm sm:text-base flex-1">${v.replace(/</g, '&lt;')}</span></button>`;
-      });
-
+      const selfGradeContainer = document.getElementById('selfGradeContainer');
+      const checkBtn = document.getElementById('checkBtn');
       const exp = document.getElementById('explanationBox');
-      if (hasSub) {
-        document.getElementById('correctAnsLabel').textContent = `Answer: ${q.answer}`;
-        document.getElementById('explanationText').textContent = q.explanation;
-        exp.classList.remove('hidden');
+      
+      const isMCQ = q.options && Object.keys(q.options).length >= 2;
+      const hasSub = !!p.selected;
+
+      // Reset explanation box
+      exp.classList.add('hidden');
+      
+      if (isMCQ) {
+        container.classList.remove('hidden');
+        selfGradeContainer.classList.add('hidden');
+        checkBtn.classList.remove('hidden');
+        container.innerHTML = '';
+        
+        const ansSet = new Set(q.answer.split(''));
+        Object.entries(q.options).forEach(([k, v]) => {
+          let style = selectedOptions.has(k) ? 'border-amber-500 bg-amber-500/10 text-white' : 'border-slate-800 bg-slate-950/60 text-slate-200';
+          if (hasSub) {
+            if (ansSet.has(k)) style = 'border-emerald-500/80 bg-emerald-950/30 text-emerald-100';
+            else if (selectedOptions.has(k)) style = 'border-rose-500/80 bg-rose-950/30 text-rose-100';
+          }
+          container.innerHTML += `<button onclick="window.selectOption('${k}', ${q.answer.length > 1})" class="w-full text-left p-4 rounded-xl border-2 transition flex items-start gap-3.5 ${style}"><span class="w-7 h-7 rounded-lg border flex items-center justify-center text-xs shrink-0 bg-slate-800">${k}</span><span class="text-sm sm:text-base flex-1">${v.replace(/</g, '&lt;')}</span></button>`;
+        });
+
+        if (hasSub) {
+          document.getElementById('correctAnsLabel').textContent = `Answer: ${q.answer}`;
+          document.getElementById('explanationText').textContent = q.explanation;
+          exp.classList.remove('hidden');
+        }
       } else {
-        exp.classList.add('hidden');
+        // Handle non-MCQ
+        container.classList.add('hidden');
+        selfGradeContainer.classList.remove('hidden');
+        checkBtn.classList.add('hidden');
+
+        if (hasSub) {
+          document.getElementById('revealBtn').classList.add('hidden');
+          document.getElementById('gradeButtons').classList.add('hidden');
+          
+          document.getElementById('correctAnsLabel').textContent = p.isCorrect ? "Marked Correct ✔" : "Marked Incorrect ✖";
+          document.getElementById('explanationText').textContent = `${q.answer !== "N/A" ? 'Answer: ' + q.answer + '\n\n' : ''}${q.explanation}`;
+          exp.classList.remove('hidden');
+        } else {
+          document.getElementById('revealBtn').classList.remove('hidden');
+          document.getElementById('gradeButtons').classList.add('hidden');
+        }
       }
 
       document.getElementById('prevBtn').disabled = currentPos === 0;
       document.getElementById('nextBtn').disabled = currentPos >= filteredIndices.length - 1;
       renderGrid();
     }
+
+    window.revealSelfGrade = function() {
+      document.getElementById('revealBtn').classList.add('hidden');
+      document.getElementById('gradeButtons').classList.remove('hidden');
+      
+      const q = allQuestions[filteredIndices[currentPos]];
+      document.getElementById('correctAnsLabel').textContent = "Official Answer";
+      document.getElementById('explanationText').textContent = `${q.answer !== "N/A" ? 'Answer: ' + q.answer + '\n\n' : ''}${q.explanation}`;
+      document.getElementById('explanationBox').classList.remove('hidden');
+    };
+
+    window.submitSelfGrade = function(isCorrect) {
+      const q = allQuestions[filteredIndices[currentPos]];
+      userProgress[q.id] = { ...userProgress[q.id], selected: 'SELF_GRADED', isCorrect: isCorrect };
+      window.saveProgress();
+      renderAll();
+    };
 
     window.selectOption = function(k, multi) {
       if (multi) selectedOptions.has(k) ? selectedOptions.delete(k) : selectedOptions.add(k);
@@ -410,7 +377,7 @@
     window.prevQuestion = () => { if (currentPos > 0) { currentPos--; renderAll(); } };
     window.toggleFlag = () => { const qId = allQuestions[filteredIndices[currentPos]].id; userProgress[qId] = { ...userProgress[qId], flagged: !userProgress[qId]?.flagged }; window.saveProgress(); renderAll(); };
     window.setMode = (m) => { appMode = m; window.applyFilter('all'); };
-    window.resetProgress = () => { if(confirm('Reset all?')) { userProgress = {}; window.saveProgress(); renderAll(); } };
+    window.resetProgress = () => { if(confirm('Reset all progress and scores?')) { userProgress = {}; window.saveProgress(); renderAll(); } };
 
     function renderGrid() {
       const g = document.getElementById('questionGrid');
